@@ -80,8 +80,8 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
         ax.legend(fontsize="small")
 
     plt.tight_layout()
-    plt.savefig(f"weibull_distributions_{input_file}.png", dpi=300)
-    plt.show()
+    plt.savefig(f"./images/weibull_distributions_{input_file}.png", dpi=300)
+    plt.show(block=False)
 
     return params
 
@@ -89,21 +89,22 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
 def read_wind_data(file_path):
     """
     Read wind speed data from a CSV file and group by month.
-
-    Parameters:
-    file_path (str): Path to the CSV file containing wind speed data
-
-    Returns:
-    dict: Dictionary with months (1-12) as keys and arrays of wind speeds as values
-    dict: Dictionary with months (1-12) as keys and arrays of dates as values
     """
     try:
-        df = pd.read_csv(file_path, usecols=["wdsp", "date"])
+        # Read CSV with low_memory=False to avoid DtypeWarning
+        df = pd.read_csv(file_path, usecols=["wdsp", "date"], low_memory=False)
+
+        # Convert wind speeds to numeric, invalid values become NaN
+        df["wdsp"] = pd.to_numeric(df["wdsp"], errors="coerce")
+
+        # Drop any rows where wind speed is NaN
         df = df.dropna(subset=["wdsp", "date"])
 
+        # Convert dates
         df["date"] = pd.to_datetime(df["date"], format="%d-%b-%Y %H:%M")
         df["month"] = df["date"].dt.month
 
+        # Group data by month
         monthly_speeds = {month: group["wdsp"].values for month, group in df.groupby("month")}
         monthly_dates = {month: group["date"].values for month, group in df.groupby("month")}
 
@@ -119,27 +120,35 @@ def read_wind_data(file_path):
 
 if __name__ == "__main__":
 
-    input_files = [("hly532", "dublin_airport")]
+    input_files = [
+        ("hly532", "dublin_airport"),
+        ("hly1075", "cork_roches_point"),
+        ("hly875", "kildare_mullingar"),
+        ("hly1875", "galway_athenry"),
+        ("hly2075", "donegal_finner"),
+        ("hly2275", "kerry_valentia_observatory"),
+    ]
+    file_to_save_to = "./data/weibull_parameters.csv"
 
-    with open("weibull_parameters.csv", "w", newline="") as csvfile:
+    with open(file_to_save_to, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(["Dataset", "Month", "Shape Parameter (k)", "Scale Parameter (gamma)", "Method", "Number of Data Points"])
 
     month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
     for input_file, input_file_name in input_files:
-        monthly_wind_speeds, monthly_dates = read_wind_data(f"./{input_file}/{input_file}.csv")
+        monthly_wind_speeds, monthly_dates = read_wind_data(f"./data/{input_file}.csv")
         if monthly_wind_speeds is None:
-            print(f"Failed to read wind speed data for {input_file}")
+            print(f"Failed to read wind speed data for {input_file_name} from ./data/{input_file}.csv")
             continue
 
         monthly_params = fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file_name)
 
         # Append results for this input file
-        with open("weibull_parameters.csv", "a", newline="") as csvfile:
+        with open(file_to_save_to, "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
             for month, methods in monthly_params.items():
                 for method, (k, gamma) in methods.items():
                     n_points = len(monthly_wind_speeds[month])
                     writer.writerow([input_file_name, month_names[month - 1], f"{k:.4f}", f"{gamma:.4f}", method, n_points])
-        print(f"Weibull parameters for {input_file_name} saved to weibull_parameters.csv")
+        print(f"Weibull parameters for {input_file_name} saved to {file_to_save_to}")
