@@ -4,58 +4,6 @@ from scipy.stats import weibull_min
 import pandas as pd
 
 
-def plot_weibull_analysis(k_values, gamma_values, num_points=1000):
-    """
-    Plot Weibull distribution analysis for different combinations of shape parameter k
-    and scale parameter gamma
-
-    Parameters:
-    k_values (list): List of shape parameters (k > 0)
-    gamma_values (list): List of scale parameters (gamma > 0)
-    num_points (int): Number of points to plot
-    """
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-
-    # Generate x values - use max gamma for range
-    x = np.linspace(0, max(gamma_values) * 5, num_points)
-
-    # Plot PDF and CDF for each combination
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(k_values) * len(gamma_values)))
-    color_idx = 0
-
-    for k in k_values:
-        for gamma in gamma_values:
-            # Calculate PDF
-            pdf = weibull_min.pdf(x, k, loc=0, scale=gamma)
-
-            # Calculate CDF
-            cdf = weibull_min.cdf(x, k, loc=0, scale=gamma)
-
-            # Plot PDF
-            ax1.plot(x, pdf, color=colors[color_idx], lw=2, label=f"k={k}, γ={gamma}")
-
-            # Plot CDF
-            ax2.plot(x, cdf, color=colors[color_idx], lw=2, label=f"k={k}, γ={gamma}")
-
-            color_idx += 1
-
-    ax1.set_title("Weibull Probability Density Functions")
-    ax1.set_xlabel("x")
-    ax1.set_ylabel("Probability Density")
-    ax1.grid(True)
-    ax1.legend()
-
-    ax2.set_title("Weibull Cumulative Distribution Functions")
-    ax2.set_xlabel("x")
-    ax2.set_ylabel("Cumulative Probability")
-    ax2.grid(True)
-    ax2.legend()
-
-    plt.tight_layout()
-    plt.show()
-
-
 def fit_weibull_to_wind_data(wind_speeds):
     """
     Fit a Weibull distribution to wind speed data and return the shape (k) and scale (gamma) parameters.
