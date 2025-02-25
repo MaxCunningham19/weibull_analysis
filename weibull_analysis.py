@@ -2,10 +2,19 @@ import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import weibull_min
+from scipy.optimize import curve_fit
 import pandas as pd
 
 
-def fit_weibull_to_monthly_wind_data(monthly_wind_speeds):
+K_INIT, GAMMA_INIT = 2, 10  # selected inital fit parameters based on intuition
+
+
+def weibull_pdf(x, c, scale):
+    """Weibull probability density function."""
+    return weibull_min.pdf(x, c, scale=scale)
+
+
+def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
     """
     Fit Weibull distributions to monthly wind speed data using multiple fitting methods and create visualization.
 
@@ -16,9 +25,9 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds):
     dict: Dictionary with months as keys  and dict of fitting method key and parameters (k, gamma) as values
     """
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    fit_methods = ["mle", "mm"]  # Maximum likelihood and method of moments
-    colors = {"mle": "red", "mm": "green"}
-    line_styles = {"mle": "-", "mm": "--"}
+    fit_methods = ["mle", "mm", "ls"]  # Maximum likelihood, method of moments, and least squares
+    colors = {"mle": "red", "mm": "green", "ls": "blue"}
+    line_styles = {"mle": "-", "mm": "--", "ls": ":"}
 
     # Create a 4x3 subplot grid
     fig, axes = plt.subplots(4, 3, figsize=(15, 20))
@@ -33,17 +42,31 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds):
 
         # Plot histogram of data points
         ax.hist(wind_speeds, bins="auto", density=True, alpha=0.7, color="skyblue", label="Wind Speed Data")
-
-        # Fit and plot for each method
         for method in fit_methods:
             try:
-                k, loc, gamma = weibull_min.fit(wind_speeds, floc=0, method=method)
-                params[month][method] = (k, gamma)
+                if method in ["mle", "mm"]:
+                    k, loc, gamma = weibull_min.fit(wind_speeds, floc=0, method=method)
+                    params[month][method] = (k, gamma)
+                elif method == "ls":
+                    # Scipy doesnt have a built in method for least squares fitting so do it using curve_fit
+                    try:
+                        hist, bin_edges = np.histogram(wind_speeds, bins="auto", density=True)
+                        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
-                # Plot Weibull PDF
+                        fitted_params, _ = curve_fit(weibull_pdf, bin_centers, hist, p0=[K_INIT, GAMMA_INIT], bounds=([0, 0], [np.inf, np.inf]))
+                        k, gamma = fitted_params
+                        params[month][method] = (k, gamma)
+
+                    except Exception as e:
+                        print(f"Detailed LS fitting error for month {month}:")
+                        print(f"  Error type: {type(e).__name__}")
+                        print(f"  Error message: {str(e)}")
+                        params[month][method] = (None, None)
+
                 x = np.linspace(0, max(wind_speeds), 1000)
                 pdf = weibull_min.pdf(x, k, loc=0, scale=gamma)
                 ax.plot(x, pdf, color=colors[method], linestyle=line_styles[method], lw=2, label=f"{method.upper()}\n(k={k:.2f}, γ={gamma:.2f})")
+
             except Exception as e:
                 print(f"Warning: {method} fitting failed for month {month}: {str(e)}")
                 params[month][method] = (None, None)
@@ -57,6 +80,7 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds):
         ax.legend(fontsize="small")
 
     plt.tight_layout()
+    plt.savefig(f"weibull_distributions_{input_file}.png", dpi=300)
     plt.show()
 
     return params
@@ -94,20 +118,28 @@ def read_wind_data(file_path):
 
 
 if __name__ == "__main__":
-    monthly_wind_speeds, monthly_dates = read_wind_data("./hly532/hly532.csv")
-    if monthly_wind_speeds is None:
-        print("Failed to read wind speed data")
-        exit()
 
-    monthly_params = fit_weibull_to_monthly_wind_data(monthly_wind_speeds)
-
-    month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    input_files = [("hly532", "dublin_airport")]
 
     with open("weibull_parameters.csv", "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(["Month", "Shape Parameter (k)", "Scale Parameter (gamma)", "Method", "Number of Data Points"])
-        for month, methods in monthly_params.items():
-            for method, (k, gamma) in methods.items():
-                n_points = len(monthly_wind_speeds[month])
-                writer.writerow([month_names[month - 1], f"{k:.4f}", f"{gamma:.4f}", method, n_points])
-    print("Weibull parameters saved to weibull_parameters.csv")
+        writer.writerow(["Dataset", "Month", "Shape Parameter (k)", "Scale Parameter (gamma)", "Method", "Number of Data Points"])
+
+    month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+    for input_file, input_file_name in input_files:
+        monthly_wind_speeds, monthly_dates = read_wind_data(f"./{input_file}/{input_file}.csv")
+        if monthly_wind_speeds is None:
+            print(f"Failed to read wind speed data for {input_file}")
+            continue
+
+        monthly_params = fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file_name)
+
+        # Append results for this input file
+        with open("weibull_parameters.csv", "a", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            for month, methods in monthly_params.items():
+                for method, (k, gamma) in methods.items():
+                    n_points = len(monthly_wind_speeds[month])
+                    writer.writerow([input_file_name, month_names[month - 1], f"{k:.4f}", f"{gamma:.4f}", method, n_points])
+        print(f"Weibull parameters for {input_file_name} saved to weibull_parameters.csv")
