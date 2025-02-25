@@ -48,12 +48,13 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
                     k, loc, gamma = weibull_min.fit(wind_speeds, floc=0, method=method)
                     params[month][method] = (k, gamma)
                 elif method == "ls":
-                    # Scipy doesnt have a built in method for least squares fitting so do it using curve_fit
+                    # Scipy doesnt have a built in method for least squares fitting so do it using curve_fi
                     try:
                         hist, bin_edges = np.histogram(wind_speeds, bins="auto", density=True)
                         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-
-                        fitted_params, _ = curve_fit(weibull_pdf, bin_centers, hist, p0=[K_INIT, GAMMA_INIT], bounds=([0, 0], [np.inf, np.inf]))
+                        fitted_params, _ = curve_fit(
+                            weibull_pdf, bin_centers, hist, p0=[K_INIT, GAMMA_INIT], bounds=([1.0, 1e-10], [np.inf, np.inf])
+                        )  # prevent k from being < 1
                         k, gamma = fitted_params
                         params[month][method] = (k, gamma)
 
@@ -107,6 +108,10 @@ def read_wind_data(file_path):
         # Group data by month
         monthly_speeds = {month: group["wdsp"].values for month, group in df.groupby("month")}
         monthly_dates = {month: group["date"].values for month, group in df.groupby("month")}
+        # Count and print number of zero wind speeds
+        for month, speeds in monthly_speeds.items():
+            zero_count = np.sum(speeds == 0)
+            print(f"Month {month}: {zero_count} zero wind speed measurements")
 
         return monthly_speeds, monthly_dates
 
@@ -123,6 +128,7 @@ if __name__ == "__main__":
     input_files = [
         ("hly532", "dublin_airport"),
         ("hly1075", "cork_roches_point"),
+        ("hly3904", "cork_airport"),
         ("hly875", "kildare_mullingar"),
         ("hly1875", "galway_athenry"),
         ("hly2075", "donegal_finner"),
