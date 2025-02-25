@@ -13,7 +13,7 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds):
     monthly_wind_speeds (dict): Dictionary with months as keys and wind speed arrays as values
 
     Returns:
-    dict: Dictionary with months as keys and dict of fitting method parameters (k, gamma) as values
+    dict: Dictionary with months as keys  and dict of fitting method key and parameters (k, gamma) as values
     """
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     fit_methods = ["mle", "mm"]  # Maximum likelihood and method of moments
