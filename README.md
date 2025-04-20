@@ -21,3 +21,9 @@ Run the script using the following command:
 ```bash
 python weibull_analysis.py
 ```
+
+To remove zero values from analysis run
+
+```bash
+python weibull_analysis.py --drop_zeros
+```
