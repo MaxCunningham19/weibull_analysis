@@ -41,7 +41,8 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
         params[month] = {}
 
         # Plot histogram of data points
-        ax.hist(wind_speeds, bins="auto", density=True, alpha=0.7, color="skyblue", label="Wind Speed Data")
+        bins = np.arange(0, np.ceil(max(wind_speeds)) + 1, 1)
+        ax.hist(wind_speeds, bins=bins, density=True, alpha=0.7, color="skyblue", label="Wind Speed Data")
         for method in fit_methods:
             try:
                 if method in ["mle", "mm"]:
@@ -89,26 +90,30 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
 
 def read_wind_data(file_path):
     """
-    Read wind speed data from a CSV file and group by month.
+    Read wind speed data from a CSV file and group by month, ignoring invalid or missing data.
     """
     try:
-        # Read CSV with low_memory=False to avoid DtypeWarning
+        # Read only relevant columns
         df = pd.read_csv(file_path, usecols=["wdsp", "date"], low_memory=False)
 
-        # Convert wind speeds to numeric, invalid values become NaN
+        # Convert wind speed to numeric (invalid values become NaN)
         df["wdsp"] = pd.to_numeric(df["wdsp"], errors="coerce")
 
-        # Drop any rows where wind speed is NaN
+        # Drop rows where wind speed or date is missing
         df = df.dropna(subset=["wdsp", "date"])
 
         # Convert dates
-        df["date"] = pd.to_datetime(df["date"], format="%d-%b-%Y %H:%M")
+        df["date"] = pd.to_datetime(df["date"], format="%d-%b-%Y %H:%M", errors="coerce")
+        df = df.dropna(subset=["date"])  # In case datetime conversion failed
+
+        # Add month column
         df["month"] = df["date"].dt.month
 
-        # Group data by month
+        # Group by month into dictionaries
         monthly_speeds = {month: group["wdsp"].values for month, group in df.groupby("month")}
         monthly_dates = {month: group["date"].values for month, group in df.groupby("month")}
-        # Count and print number of zero wind speeds
+
+        # Print zero wind speeds count
         for month, speeds in monthly_speeds.items():
             zero_count = np.sum(speeds == 0)
             print(f"Month {month}: {zero_count} zero wind speed measurements")
