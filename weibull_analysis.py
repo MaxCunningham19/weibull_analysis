@@ -1,8 +1,9 @@
 import csv
 import decimal
+import os
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import weibull_min, kstest
+from scipy.stats import weibull_min, kstest, probplot
 from scipy.optimize import curve_fit
 import pandas as pd
 import argparse
@@ -35,6 +36,96 @@ def compute_fit_statistics(wind_speeds, k, gamma, method_name):
     ks_stat, ks_pval = kstest(wind_speeds, "weibull_min", args=(k, 0, gamma), method="asymp")
 
     return aic, bic, ks_stat, ks_pval
+
+
+def plot_qq_plots(monthly_wind_speeds, monthly_params, fit_methods, month_names, input_file_name):
+    """
+    Generate QQ plots for each month and fitting method (MLE, MM, LS) on the same subplot.
+
+    Parameters:
+    monthly_wind_speeds (dict): Dictionary of wind speeds grouped by month.
+    monthly_params (dict): Fitting parameters (k, gamma) for each month and method.
+    fit_methods (list): List of fitting methods ("mle", "mm", "ls").
+    month_names (list): List of month names.
+    input_file_name (str): Name of the input file for labeling.
+    """
+    fig, axes = plt.subplots(4, 3, figsize=(15, 20))
+    axes = axes.ravel()
+
+    colors = {"mle": "red", "mm": "green", "ls": "blue"}
+
+    for month in range(1, 13):
+        wind_speeds = monthly_wind_speeds[month]
+        ax = axes[month - 1]
+
+        ax.set_title(f"{month_names[month-1]}")
+
+        for method in fit_methods:
+            k, gamma = monthly_params[month].get(method, (None, None))
+            if k is None or gamma is None:
+                continue
+
+            res = probplot(wind_speeds, dist="weibull_min", sparams=(k, 0, gamma), plot=None)
+            ax.plot(res[0][1], res[0][1], color="black", markersize=1)
+            ax.plot(res[0][0], res[0][1], "o", color=colors[method], label=f"{method.upper()}", markersize=2, alpha=0.4)
+
+        ax.grid(True)
+        ax.legend(fontsize="small")
+
+    plt.tight_layout()
+    plt.savefig(f"./images/qq_plots/{input_file_name}.png", dpi=300)
+    plt.close()
+
+
+def plot_pp_plots(monthly_wind_speeds, monthly_params, fit_methods, month_names, input_file_name):
+    """
+    Generate PP plots for each month and fitting method (MLE, MM, LS) on the same subplot.
+
+    Parameters:
+    monthly_wind_speeds (dict): Dictionary of wind speeds grouped by month.
+    monthly_params (dict): Fitting parameters (k, gamma) for each month and method.
+    fit_methods (list): List of fitting methods ("mle", "mm", "ls").
+    month_names (list): List of month names.
+    input_file_name (str): Name of the input file for labeling.
+    """
+    fig, axes = plt.subplots(4, 3, figsize=(15, 20))
+    axes = axes.ravel()
+
+    colors = {"mle": "red", "mm": "green", "ls": "blue"}
+
+    for month in range(1, 13):
+        wind_speeds = monthly_wind_speeds[month]
+        ax = axes[month - 1]
+
+        ax.set_title(f"{month_names[month-1]}")
+
+        has_theoretical_line = False
+        for method in fit_methods:
+            k, gamma = monthly_params[month].get(method, (None, None))
+            if k is None or gamma is None:
+                continue
+
+            # Sort the wind speed data and calculate the observed CDF
+            sorted_data = np.sort(wind_speeds)
+            observed_cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
+
+            # Calculate the theoretical CDF using the Weibull distribution
+            theoretical_cdf = weibull_min.cdf(sorted_data, k, scale=gamma)
+
+            # Plot the PP plot (observed CDF vs theoretical CDF)
+            if not has_theoretical_line:
+                ax.plot(theoretical_cdf, theoretical_cdf, color="black", markersize=1)
+                has_theoretical_line = True
+            ax.plot(observed_cdf, theoretical_cdf, "o", color=colors[method], label=f"{method.upper()}", markersize=3, alpha=0.4)
+
+        ax.set_xlabel("Observed CDF")
+        ax.set_ylabel("Theoretical CDF")
+        ax.grid(True)
+        ax.legend(fontsize="small")
+
+    plt.tight_layout()
+    plt.savefig(f"./images/pp_plots/{input_file_name}.png", dpi=300)
+    plt.close()
 
 
 def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
@@ -105,8 +196,8 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
         ax.legend(fontsize="small")
 
     plt.tight_layout()
-    plt.savefig(f"./images/weibull_distributions_{input_file}.png", dpi=300)
-    plt.show(block=False)
+    plt.savefig(f"./images/weibull_distributions/{input_file}.png", dpi=300)
+    plt.close()
 
     return params
 
@@ -117,16 +208,12 @@ def read_wind_data(file_path, drop_zeros=False):
     Optionally drops zero wind speed values.
     """
     try:
-        # Read only relevant columns
         df = pd.read_csv(file_path, usecols=["wdsp", "date"], low_memory=False)
 
-        # Convert wind speed to numeric (invalid values become NaN)
         df["wdsp"] = pd.to_numeric(df["wdsp"], errors="coerce")
 
-        # Drop rows where wind speed or date is missing
         df = df.dropna(subset=["wdsp", "date"])
 
-        # Convert date column
         df["date"] = pd.to_datetime(df["date"], format="%d-%b-%Y %H:%M", errors="coerce")
         df = df.dropna(subset=["date"])
 
@@ -134,14 +221,11 @@ def read_wind_data(file_path, drop_zeros=False):
         if drop_zeros:
             df = df[df["wdsp"] != 0]
 
-        # Add month column
         df["month"] = df["date"].dt.month
 
-        # Group by month into dictionaries
         monthly_speeds = {month: group["wdsp"].values for month, group in df.groupby("month")}
         monthly_dates = {month: group["date"].values for month, group in df.groupby("month")}
 
-        # Print zero wind speeds count (based on original data, not filtered one)
         if not drop_zeros:
             for month, speeds in monthly_speeds.items():
                 zero_count = np.sum(speeds == 0)
@@ -171,7 +255,10 @@ if __name__ == "__main__":
     file_to_save_to = "./data/weibull_parameters.csv"
     stats_file = "./data/weibull_fitting_stats.csv"
 
-    # Write headers for the stats CSV file
+    os.makedirs("./images/weibull_distributions")
+    os.makedirs("./images/qq_plots")
+    os.makedirs("./images/pp_plots")
+
     with open(stats_file, "w", newline="") as stats_csvfile:
         writer = csv.writer(stats_csvfile)
         writer.writerow(
@@ -197,10 +284,11 @@ if __name__ == "__main__":
             print(f"Failed to read wind speed data for {input_file_name} from ./data/{input_file}.csv")
             continue
 
-        # Fit Weibull distributions and plot them
         monthly_params = fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file_name)
 
-        # Save Weibull parameters
+        plot_qq_plots(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
+        plot_pp_plots(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
+
         with open(file_to_save_to, "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
             for month, methods in monthly_params.items():
