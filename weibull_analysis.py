@@ -4,6 +4,12 @@ import matplotlib.pyplot as plt
 from scipy.stats import weibull_min
 from scipy.optimize import curve_fit
 import pandas as pd
+import argparse
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--drop_zeros", action="store_true", default=False, help="Drop zero valued data points from analysis.")
+args = parser.parse_args()
 
 
 K_INIT, GAMMA_INIT = 2, 10  # selected inital fit parameters based on intuition
@@ -88,9 +94,10 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
     return params
 
 
-def read_wind_data(file_path):
+def read_wind_data(file_path, drop_zeros=False):
     """
     Read wind speed data from a CSV file and group by month, ignoring invalid or missing data.
+    Optionally drops zero wind speed values.
     """
     try:
         # Read only relevant columns
@@ -102,9 +109,13 @@ def read_wind_data(file_path):
         # Drop rows where wind speed or date is missing
         df = df.dropna(subset=["wdsp", "date"])
 
-        # Convert dates
+        # Convert date column
         df["date"] = pd.to_datetime(df["date"], format="%d-%b-%Y %H:%M", errors="coerce")
-        df = df.dropna(subset=["date"])  # In case datetime conversion failed
+        df = df.dropna(subset=["date"])
+
+        # Optionally drop zero wind speed values
+        if drop_zeros:
+            df = df[df["wdsp"] != 0]
 
         # Add month column
         df["month"] = df["date"].dt.month
@@ -113,10 +124,11 @@ def read_wind_data(file_path):
         monthly_speeds = {month: group["wdsp"].values for month, group in df.groupby("month")}
         monthly_dates = {month: group["date"].values for month, group in df.groupby("month")}
 
-        # Print zero wind speeds count
-        for month, speeds in monthly_speeds.items():
-            zero_count = np.sum(speeds == 0)
-            print(f"Month {month}: {zero_count} zero wind speed measurements")
+        # Print zero wind speeds count (based on original data, not filtered one)
+        if not drop_zeros:
+            for month, speeds in monthly_speeds.items():
+                zero_count = np.sum(speeds == 0)
+                print(f"Month {month}: {zero_count} zero wind speed measurements")
 
         return monthly_speeds, monthly_dates
 
@@ -148,14 +160,13 @@ if __name__ == "__main__":
     month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
     for input_file, input_file_name in input_files:
-        monthly_wind_speeds, monthly_dates = read_wind_data(f"./data/{input_file}.csv")
+        monthly_wind_speeds, monthly_dates = read_wind_data(f"./data/{input_file}.csv", args.drop_zeros)
         if monthly_wind_speeds is None:
             print(f"Failed to read wind speed data for {input_file_name} from ./data/{input_file}.csv")
             continue
 
         monthly_params = fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file_name)
 
-        # Append results for this input file
         with open(file_to_save_to, "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
             for month, methods in monthly_params.items():
