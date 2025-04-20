@@ -1,7 +1,8 @@
 import csv
+import decimal
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import weibull_min
+from scipy.stats import weibull_min, kstest
 from scipy.optimize import curve_fit
 import pandas as pd
 import argparse
@@ -12,12 +13,28 @@ parser.add_argument("--drop_zeros", action="store_true", default=False, help="Dr
 args = parser.parse_args()
 
 
-K_INIT, GAMMA_INIT = 2, 10  # selected inital fit parameters based on intuition
+K_INIT, GAMMA_INIT = 2, 10  # selected initial fit parameters based on intuition
 
 
 def weibull_pdf(x, c, scale):
     """Weibull probability density function."""
     return weibull_min.pdf(x, c, scale=scale)
+
+
+def compute_fit_statistics(wind_speeds, k, gamma, method_name):
+    """Compute AIC, BIC, and KS test statistic/p-value for Weibull fit."""
+    if k is None or gamma is None:
+        return None, None, None, None
+
+    n = len(wind_speeds)
+    log_likelihood = np.sum(weibull_min.logpdf(wind_speeds, k, loc=0, scale=gamma))
+    aic = 2 * 2 - 2 * log_likelihood
+    bic = 2 * np.log(n) - 2 * log_likelihood
+
+    # Perform KS test (note: loc is 0 for all our fits)
+    ks_stat, ks_pval = kstest(wind_speeds, "weibull_min", args=(k, 0, gamma), method="asymp")
+
+    return aic, bic, ks_stat, ks_pval
 
 
 def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
@@ -55,7 +72,7 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
                     k, loc, gamma = weibull_min.fit(wind_speeds, floc=0, method=method)
                     params[month][method] = (k, gamma)
                 elif method == "ls":
-                    # Scipy doesnt have a built in method for least squares fitting so do it using curve_fi
+                    # Scipy doesnt have a built-in method for least squares fitting so do it using curve_fit
                     try:
                         hist, bin_edges = np.histogram(wind_speeds, bins="auto", density=True)
                         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
@@ -152,10 +169,25 @@ if __name__ == "__main__":
         ("hly2275", "kerry_valentia_observatory"),
     ]
     file_to_save_to = "./data/weibull_parameters.csv"
+    stats_file = "./data/weibull_fitting_stats.csv"
 
-    with open(file_to_save_to, "w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(["Dataset", "Month", "Shape Parameter (k)", "Scale Parameter (gamma)", "Method", "Number of Data Points"])
+    # Write headers for the stats CSV file
+    with open(stats_file, "w", newline="") as stats_csvfile:
+        writer = csv.writer(stats_csvfile)
+        writer.writerow(
+            [
+                "Dataset",
+                "Month",
+                "Method",
+                "Shape Parameter (k)",
+                "Scale Parameter (gamma)",
+                "Num Data Points",
+                "AIC",
+                "BIC",
+                "KS Statistic",
+                "KS p-value",
+            ]
+        )
 
     month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
@@ -165,12 +197,38 @@ if __name__ == "__main__":
             print(f"Failed to read wind speed data for {input_file_name} from ./data/{input_file}.csv")
             continue
 
+        # Fit Weibull distributions and plot them
         monthly_params = fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file_name)
 
+        # Save Weibull parameters
         with open(file_to_save_to, "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
             for month, methods in monthly_params.items():
                 for method, (k, gamma) in methods.items():
                     n_points = len(monthly_wind_speeds[month])
                     writer.writerow([input_file_name, month_names[month - 1], f"{k:.4f}", f"{gamma:.4f}", method, n_points])
-        print(f"Weibull parameters for {input_file_name} saved to {file_to_save_to}")
+
+        # Compute and save goodness-of-fit statistics
+        with open(stats_file, "a", newline="") as stats_csvfile:
+            writer = csv.writer(stats_csvfile)
+            for month, methods in monthly_params.items():
+                wind_speeds = monthly_wind_speeds[month]
+                for method, (k, gamma) in methods.items():
+                    aic, bic, ks_stat, ks_pval = compute_fit_statistics(np.array(wind_speeds), k, gamma, method)
+                    n_points = len(wind_speeds)
+                    writer.writerow(
+                        [
+                            input_file_name,
+                            month_names[month - 1],
+                            method,
+                            f"{k:.4f}" if k is not None else None,
+                            f"{gamma:.5f}" if gamma is not None else None,
+                            n_points,
+                            f"{aic:.5f}" if aic is not None else None,
+                            f"{bic:.5f}" if bic is not None else None,
+                            f"{ks_stat:.5f}" if ks_stat is not None else None,
+                            f"{ks_pval:.5f}" if ks_pval is not None else 0.00000,
+                        ]
+                    )
+
+        print(f"Weibull parameters and stats for {input_file_name} saved.")
