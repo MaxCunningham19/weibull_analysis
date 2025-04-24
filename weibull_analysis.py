@@ -1,13 +1,13 @@
 from collections import defaultdict
 import csv
-import decimal
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import weibull_min, kstest, probplot
+from scipy.stats import weibull_min, kstest, probplot, ks_2samp
 from scipy.optimize import curve_fit
 import pandas as pd
 import argparse
+import seaborn as sns
 
 
 parser = argparse.ArgumentParser()
@@ -200,6 +200,36 @@ def plot_cdf(monthly_wind_speeds, monthly_params, fit_methods, month_names, inpu
     plt.close()
 
 
+def plot_ks_statistics(monthly_wind_speeds, month_names, input_file_name):
+    ks_matrix = np.zeros((12, 12))
+
+    for i in range(12):
+        for j in range(12):
+            data_i = monthly_wind_speeds[i + 1]
+            data_j = monthly_wind_speeds[j + 1]
+
+            if len(data_i) == 0 or len(data_j) == 0:
+                ks_matrix[i, j] = np.nan
+                continue
+
+            ks_stat, _ = ks_2samp(data_i, data_j)
+            ks_matrix[i, j] = ks_stat
+
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(
+        ks_matrix, xticklabels=month_names, yticklabels=month_names, annot=True, fmt=".2f", cmap="coolwarm", cbar_kws={"label": "KS Statistic"}
+    )
+
+    plt.title(f"Pairwise KS Statistics Between Months\n{input_file_name.replace('_', ' ').title()}")
+    plt.xlabel("Month")
+    plt.ylabel("Month")
+    plt.tight_layout()
+    os.makedirs("./images/ks_heatmaps", exist_ok=True)
+    plt.savefig(f"./images/ks_heatmaps/{input_file_name}_pairwise_ks.png", dpi=300)
+    plt.close()
+    return ks_matrix
+
+
 def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
     """
     Fit Weibull distributions to monthly wind speed data using multiple fitting methods and create visualization.
@@ -325,11 +355,13 @@ if __name__ == "__main__":
     file_to_save_to = "./data/weibull_parameters.csv"
     stats_file = "./data/weibull_fitting_stats.csv"
     averages_file = "./data/weibull_average_stats.csv"
+    ks_files = "./data/monthly_comparisons.csv"
 
     os.makedirs("./images/weibull_distributions", exist_ok=True)
     os.makedirs("./images/qq_plots", exist_ok=True)
     os.makedirs("./images/pp_plots", exist_ok=True)
     os.makedirs("./images/cdf_plots", exist_ok=True)
+    os.makedirs("./images/ks_heatmaps", exist_ok=True)
 
     with open(stats_file, "w", newline="") as stats_csvfile:
         writer = csv.writer(stats_csvfile)
@@ -355,6 +387,9 @@ if __name__ == "__main__":
         )
 
     month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    with open(ks_files, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["Input File", "Month"] + month_names)
 
     for input_file, input_file_name in input_files:
         monthly_wind_speeds, monthly_dates = read_wind_data(f"./data/{input_file}.csv", args.drop_zeros)
@@ -367,6 +402,16 @@ if __name__ == "__main__":
         plot_qq_plots(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
         plot_pp_plots(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
         plot_cdf(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
+        ks_matrix = plot_ks_statistics(monthly_wind_speeds, month_names, input_file_name)
+
+        with open(ks_files, "a", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+
+            for i, row_name in enumerate(month_names):
+                row = [input_file_name, row_name]
+                for j in range(len(month_names)):
+                    row.append(f"{ks_matrix[i, j]:.4f}")
+                writer.writerow(row)
 
         with open(file_to_save_to, "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
@@ -422,7 +467,6 @@ if __name__ == "__main__":
                 writer.writerow(
                     [
                         input_file_name,
-                        "ALL_MONTHS",
                         method,
                         f"{stats['k_sum']/count:.4f}" if count else None,
                         f"{stats['gamma_sum']/count:.5f}" if count else None,
