@@ -1,3 +1,4 @@
+from collections import defaultdict
 import csv
 import decimal
 import os
@@ -15,6 +16,10 @@ args = parser.parse_args()
 
 
 K_INIT, GAMMA_INIT = 2, 10  # selected initial fit parameters based on intuition
+
+colors = {"mle": "red", "mm": "green", "ls": "blue"}
+line_styles = {"mle": ":", "mm": "--", "ls": "-"}
+alphas = {"mle": 0.9, "mm": 0.7, "ls": 0.5}
 
 
 def weibull_pdf(x, c, scale):
@@ -52,24 +57,34 @@ def plot_qq_plots(monthly_wind_speeds, monthly_params, fit_methods, month_names,
     fig, axes = plt.subplots(4, 3, figsize=(15, 20))
     axes = axes.ravel()
 
-    colors = {"mle": "red", "mm": "green", "ls": "blue"}
-
     for month in range(1, 13):
         wind_speeds = monthly_wind_speeds[month]
         ax = axes[month - 1]
 
-        ax.set_title(f"{month_names[month-1]}")
-
+        min_q, max_q = float("inf"), float("-inf")
         for method in fit_methods:
             k, gamma = monthly_params[month].get(method, (None, None))
             if k is None or gamma is None:
                 continue
 
             res = probplot(wind_speeds, dist="weibull_min", sparams=(k, 0, gamma), plot=None)
-            ax.plot(res[0][1], res[0][1], color="black", markersize=1)
-            ax.plot(res[0][0], res[0][1], "o", color=colors[method], label=f"{method.upper()}", markersize=2, alpha=0.4)
+            theoretical_q = res[0][0]
+            empirical_q = res[0][1]
 
-        ax.grid(True)
+            ax.plot(
+                theoretical_q, empirical_q, color=colors[method], linestyle=line_styles[method], lw=2, label=f"{method.upper()}", alpha=alphas[method]
+            )
+
+            min_q = min(min(theoretical_q), min(empirical_q), min_q)
+            max_q = max(max(theoretical_q), max(empirical_q), max_q)
+        ax.plot([min_q, max_q], [min_q, max_q], "k", lw=2, alpha=0.6)
+
+        ax.set_title(f"{month_names[month-1]}")
+        ax.grid(True, alpha=0.3)
+        if month in [10, 11, 12]:  # Bottom row
+            ax.set_xlabel("Theoretical Quantiles")
+        if month in [1, 4, 7, 10]:  # Left column
+            ax.set_ylabel("Observed Quantiles")
         ax.legend(fontsize="small")
 
     plt.tight_layout()
@@ -91,15 +106,11 @@ def plot_pp_plots(monthly_wind_speeds, monthly_params, fit_methods, month_names,
     fig, axes = plt.subplots(4, 3, figsize=(15, 20))
     axes = axes.ravel()
 
-    colors = {"mle": "red", "mm": "green", "ls": "blue"}
-
     for month in range(1, 13):
         wind_speeds = monthly_wind_speeds[month]
         ax = axes[month - 1]
 
-        ax.set_title(f"{month_names[month-1]}")
-
-        has_theoretical_line = False
+        has_plot = False
         for method in fit_methods:
             k, gamma = monthly_params[month].get(method, (None, None))
             if k is None or gamma is None:
@@ -108,23 +119,84 @@ def plot_pp_plots(monthly_wind_speeds, monthly_params, fit_methods, month_names,
             # Sort the wind speed data and calculate the observed CDF
             sorted_data = np.sort(wind_speeds)
             observed_cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
-
-            # Calculate the theoretical CDF using the Weibull distribution
             theoretical_cdf = weibull_min.cdf(sorted_data, k, scale=gamma)
+            if not has_plot:
+                ax.plot(theoretical_cdf, theoretical_cdf, "k", lw=2, markersize=1, alpha=1.0)
+                has_plot = True
+            ax.plot(
+                theoretical_cdf,
+                observed_cdf,
+                color=colors[method],
+                linestyle=line_styles[method],
+                lw=2,
+                label=f"{method.upper()}",
+                alpha=alphas[method],
+            )
 
-            # Plot the PP plot (observed CDF vs theoretical CDF)
-            if not has_theoretical_line:
-                ax.plot(theoretical_cdf, theoretical_cdf, color="black", markersize=1)
-                has_theoretical_line = True
-            ax.plot(observed_cdf, theoretical_cdf, "o", color=colors[method], label=f"{method.upper()}", markersize=3, alpha=0.4)
-
-        ax.set_xlabel("Observed CDF")
-        ax.set_ylabel("Theoretical CDF")
-        ax.grid(True)
+        ax.set_title(f"{month_names[month-1]}")
+        ax.grid(True, alpha=0.3)
+        if month in [10, 11, 12]:  # Bottom row
+            ax.set_xlabel("Theoretical CDF")
+        if month in [1, 4, 7, 10]:  # Left column
+            ax.set_ylabel("Observed CDF")
         ax.legend(fontsize="small")
 
     plt.tight_layout()
     plt.savefig(f"./images/pp_plots/{input_file_name}.png", dpi=300)
+    plt.close()
+
+
+def plot_cdf(monthly_wind_speeds, monthly_params, fit_methods, month_names, input_file_name):
+    """
+    Generate CDF plots (Wind Speed vs CDF) for each month and fitting method (MLE, MM, LS) on the same subplot.
+
+    Parameters:
+    monthly_wind_speeds (dict): Dictionary of wind speeds grouped by month.
+    monthly_params (dict): Fitting parameters (k, gamma) for each month and method.
+    fit_methods (list): List of fitting methods ("mle", "mm", "ls").
+    month_names (list): List of month names.
+    input_file_name (str): Name of the input file for labeling.
+    """
+    fig, axes = plt.subplots(4, 3, figsize=(15, 20))
+    axes = axes.ravel()
+
+    for month in range(1, 13):
+        wind_speeds = monthly_wind_speeds[month]
+        ax = axes[month - 1]
+
+        ax.set_title(month_names[month - 1])
+
+        # Empirical CDF
+        sorted_data = np.sort(wind_speeds)
+        empirical_cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
+        ax.plot(sorted_data, empirical_cdf, "k", label="Empirical", markersize=3)
+
+        for method in fit_methods:
+            k, gamma = monthly_params[month].get(method, (None, None))
+            if k is None or gamma is None:
+                continue
+
+            theoretical_cdf = weibull_min.cdf(sorted_data, k, scale=gamma)
+            ax.plot(
+                sorted_data,
+                theoretical_cdf,
+                color=colors[method],
+                linestyle=line_styles[method],
+                lw=2,
+                label=f"{method.upper()}",
+                alpha=alphas[method],
+            )
+
+        ax.set_title(f"{month_names[month-1]}")
+        ax.grid(True, alpha=0.3)
+        if month in [10, 11, 12]:  # Bottom row
+            ax.set_xlabel("Wind Speed")
+        if month in [1, 4, 7, 10]:  # Left column
+            ax.set_ylabel("Probability Density")
+        ax.legend(fontsize="small")
+
+    plt.tight_layout()
+    plt.savefig(f"./images/cdf_plots/{input_file_name}.png", dpi=300)
     plt.close()
 
 
@@ -140,8 +212,6 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
     """
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     fit_methods = ["mle", "mm", "ls"]  # Maximum likelihood, method of moments, and least squares
-    colors = {"mle": "red", "mm": "green", "ls": "blue"}
-    line_styles = {"mle": "-", "mm": "--", "ls": ":"}
 
     # Create a 4x3 subplot grid
     fig, axes = plt.subplots(4, 3, figsize=(15, 20))
@@ -181,7 +251,7 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
 
                 x = np.linspace(0, max(wind_speeds), 1000)
                 pdf = weibull_min.pdf(x, k, loc=0, scale=gamma)
-                ax.plot(x, pdf, color=colors[method], linestyle=line_styles[method], lw=2, label=f"{method.upper()}\n(k={k:.2f}, γ={gamma:.2f})")
+                ax.plot(x, pdf, color=colors[method], linestyle=line_styles[method], lw=2, label=f"{method.upper()}", alpha=alphas[method])
 
             except Exception as e:
                 print(f"Warning: {method} fitting failed for month {month}: {str(e)}")
@@ -254,10 +324,12 @@ if __name__ == "__main__":
     ]
     file_to_save_to = "./data/weibull_parameters.csv"
     stats_file = "./data/weibull_fitting_stats.csv"
+    averages_file = "./data/weibull_average_stats.csv"
 
-    os.makedirs("./images/weibull_distributions")
-    os.makedirs("./images/qq_plots")
-    os.makedirs("./images/pp_plots")
+    os.makedirs("./images/weibull_distributions", exist_ok=True)
+    os.makedirs("./images/qq_plots", exist_ok=True)
+    os.makedirs("./images/pp_plots", exist_ok=True)
+    os.makedirs("./images/cdf_plots", exist_ok=True)
 
     with open(stats_file, "w", newline="") as stats_csvfile:
         writer = csv.writer(stats_csvfile)
@@ -276,6 +348,12 @@ if __name__ == "__main__":
             ]
         )
 
+    with open(averages_file, "w", newline="") as avg_stats_csvfile:
+        writer = csv.writer(avg_stats_csvfile)
+        writer.writerow(
+            ["Dataset", "Method", "Shape Parameter (k)", "Scale Parameter (gamma)", "Num Data Points", "AIC", "BIC", "KS Statistic", "KS p-value"]
+        )
+
     month_names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
     for input_file, input_file_name in input_files:
@@ -288,6 +366,7 @@ if __name__ == "__main__":
 
         plot_qq_plots(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
         plot_pp_plots(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
+        plot_cdf(monthly_wind_speeds, monthly_params, ["mle", "mm", "ls"], month_names, input_file_name)
 
         with open(file_to_save_to, "a", newline="") as csvfile:
             writer = csv.writer(csvfile)
@@ -296,7 +375,6 @@ if __name__ == "__main__":
                     n_points = len(monthly_wind_speeds[month])
                     writer.writerow([input_file_name, month_names[month - 1], f"{k:.4f}", f"{gamma:.4f}", method, n_points])
 
-        # Compute and save goodness-of-fit statistics
         with open(stats_file, "a", newline="") as stats_csvfile:
             writer = csv.writer(stats_csvfile)
             for month, methods in monthly_params.items():
@@ -318,5 +396,42 @@ if __name__ == "__main__":
                             f"{ks_pval:.5f}" if ks_pval is not None else 0.00000,
                         ]
                     )
+
+        method_totals = defaultdict(
+            lambda: {"k_sum": 0.0, "gamma_sum": 0.0, "aic_sum": 0.0, "bic_sum": 0.0, "ks_stat_sum": 0.0, "ks_pval_sum": 0.0, "n_points": 0}
+        )
+        for month, methods in monthly_params.items():
+            wind_speeds = monthly_wind_speeds[month]
+            for method, (k, gamma) in methods.items():
+                aic, bic, ks_stat, ks_pval = compute_fit_statistics(np.array(wind_speeds), k, gamma, method)
+                n_points = len(wind_speeds)
+
+                stats = method_totals[method]
+                stats["k_sum"] += k if k is not None else 0
+                stats["gamma_sum"] += gamma if gamma is not None else 0
+                stats["aic_sum"] += aic if aic is not None else 0
+                stats["bic_sum"] += bic if bic is not None else 0
+                stats["ks_stat_sum"] += ks_stat if ks_stat is not None else 0
+                stats["ks_pval_sum"] += ks_pval if ks_pval is not None else 0
+                stats["n_points"] += n_points
+
+        with open(averages_file, "a", newline="") as avg_stats_csvfile:
+            writer = csv.writer(avg_stats_csvfile)
+            for method, stats in method_totals.items():
+                count = 12
+                writer.writerow(
+                    [
+                        input_file_name,
+                        "ALL_MONTHS",
+                        method,
+                        f"{stats['k_sum']/count:.4f}" if count else None,
+                        f"{stats['gamma_sum']/count:.5f}" if count else None,
+                        stats["n_points"],
+                        f"{stats['aic_sum']/count:.5f}" if count else None,
+                        f"{stats['bic_sum']/count:.5f}" if count else None,
+                        f"{stats['ks_stat_sum']/count:.5f}" if count else None,
+                        f"{stats['ks_pval_sum']/count:.5f}" if count else 0.00000,
+                    ]
+                )
 
         print(f"Weibull parameters and stats for {input_file_name} saved.")
