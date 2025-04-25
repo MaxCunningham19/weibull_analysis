@@ -347,12 +347,11 @@ if __name__ == "__main__":
         ("hly532", "dublin_airport"),
         ("hly1075", "cork_roches_point"),
         ("hly3904", "cork_airport"),
-        ("hly875", "kildare_mullingar"),
+        ("hly875", "westmeath_mullingar"),
         ("hly1875", "galway_athenry"),
         ("hly2075", "donegal_finner"),
         ("hly2275", "kerry_valentia_observatory"),
     ]
-    file_to_save_to = "./data/weibull_parameters.csv"
     stats_file = "./data/weibull_fitting_stats.csv"
     averages_file = "./data/weibull_average_stats.csv"
     ks_files = "./data/monthly_comparisons.csv"
@@ -412,13 +411,6 @@ if __name__ == "__main__":
                 for j in range(len(month_names)):
                     row.append(f"{ks_matrix[i, j]:.4f}")
                 writer.writerow(row)
-
-        with open(file_to_save_to, "a", newline="") as csvfile:
-            writer = csv.writer(csvfile)
-            for month, methods in monthly_params.items():
-                for method, (k, gamma) in methods.items():
-                    n_points = len(monthly_wind_speeds[month])
-                    writer.writerow([input_file_name, month_names[month - 1], f"{k:.4f}", f"{gamma:.4f}", method, n_points])
 
         with open(stats_file, "a", newline="") as stats_csvfile:
             writer = csv.writer(stats_csvfile)
