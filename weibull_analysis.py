@@ -301,6 +301,63 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
 
     return params
 
+def plot_avg_ks_per_method(averages_file_path, output_path="./images/model_comparison/avg_ks_by_method.png"):
+    """
+    Create a bar chart showing average KS statistic for each fitting method across all stations.
+    """
+    df = pd.read_csv(averages_file_path)
+
+    # Clean method names and ensure consistent formatting
+    df["Method"] = df["Method"].str.lower()
+
+    # Group by Method and calculate mean KS Statistic
+    avg_ks = df.groupby("Method")["KS Statistic"].mean().sort_values()
+
+    # Aesthetics consistent with other plots
+    plt.figure(figsize=(8, 6))
+    bars = plt.bar(avg_ks.index.str.upper(), avg_ks.values, color=[colors[m] for m in avg_ks.index])
+
+    plt.title("Average KS Statistic per Fitting Method", fontsize=14)
+    plt.ylabel("Average KS Statistic", fontsize=12)
+    plt.xlabel("Fitting Method", fontsize=12)
+    plt.grid(axis='y', alpha=0.3)
+
+    for bar in bars:
+        yval = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2.0, yval + 0.002, f"{yval:.3f}", ha='center', va='bottom', fontsize=10)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+
+def plot_avg_params_per_station(averages_file_path, output_path="./images/model_comparison/avg_params_by_station.png"):
+    """
+    Create bar charts for average shape (k) and scale (gamma) per station for the chosen method (MLE).
+    """
+    df = pd.read_csv(averages_file_path)
+    df_mle = df[df["Method"].str.lower() == "mle"]
+
+    stations = df_mle["Dataset"]
+    shape_k = df_mle["Shape Parameter (k)"].astype(float)
+    scale_gamma = df_mle["Scale Parameter (gamma)"].astype(float)
+
+    x = np.arange(len(stations))
+    width = 0.35
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(x - width/2, shape_k, width, label="Shape (k)", color="skyblue")
+    plt.bar(x + width/2, scale_gamma, width, label="Scale (γ)", color="lightcoral")
+
+    plt.xticks(x, stations, rotation=45, ha="right")
+    plt.ylabel("Parameter Value")
+    plt.title("Average Weibull Parameters per Station (MLE)")
+    plt.legend()
+    plt.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path, dpi=300)
+    plt.close()
 
 def read_wind_data(file_path, drop_zeros=False):
     """
@@ -471,3 +528,5 @@ if __name__ == "__main__":
                 )
 
         print(f"Weibull parameters and stats for {input_file_name} saved.")
+        plot_avg_ks_per_method(averages_file)
+        plot_avg_params_per_station(averages_file)
