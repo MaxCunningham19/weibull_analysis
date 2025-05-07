@@ -106,7 +106,7 @@ def plot_percentile_stats(monthly_params, fit_methods, month_names, input_file_n
 
     fig.legend(legend_handles, legend_labels, loc="lower center", ncol=2, fontsize=18)
     plt.tight_layout(rect=[0, 0.05, 1, 1])
-    plt.savefig(f"./images/percentile_plots/{input_file_name}.png", dpi=500)
+    plt.savefig(f"./images/percentile_plots/{input_file_name}.png", dpi=400)
     plt.close()
 
 
@@ -165,7 +165,7 @@ def plot_qq_plots(monthly_wind_speeds, monthly_params, fit_methods, month_names,
     fig.legend(legend_handles, legend_labels, loc="lower center", ncol=len(legend_labels), fontsize=18)
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
-    plt.savefig(f"./images/qq_plots/{input_file_name}.png", dpi=500)
+    plt.savefig(f"./images/qq_plots/{input_file_name}.png", dpi=400)
     plt.close()
 
 
@@ -226,7 +226,7 @@ def plot_pp_plots(monthly_wind_speeds, monthly_params, fit_methods, month_names,
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
-    plt.savefig(f"./images/pp_plots/{input_file_name}.png", dpi=500)
+    plt.savefig(f"./images/pp_plots/{input_file_name}.png", dpi=400)
     plt.close()
 
 
@@ -289,7 +289,7 @@ def plot_cdf(monthly_wind_speeds, monthly_params, fit_methods, month_names, inpu
     fig.legend(legend_handles, legend_labels, loc="lower center", ncol=len(legend_labels), fontsize=18)
     plt.tight_layout(rect=[0, 0.05, 1, 1])  # Leave space at the bottom for the legend
 
-    plt.savefig(f"./images/cdf_plots/{input_file_name}.png", dpi=500)
+    plt.savefig(f"./images/cdf_plots/{input_file_name}.png", dpi=400)
     plt.close()
 
 
@@ -318,7 +318,7 @@ def plot_ks_statistics(monthly_wind_speeds, month_names, input_file_name):
     plt.ylabel("Month")
     plt.tight_layout()
     os.makedirs("./images/ks_heatmaps", exist_ok=True)
-    plt.savefig(f"./images/ks_heatmaps/{input_file_name}_pairwise_ks.png", dpi=500)
+    plt.savefig(f"./images/ks_heatmaps/{input_file_name}_pairwise_ks.png", dpi=400)
     plt.close()
     return ks_matrix
 
@@ -389,7 +389,7 @@ def fit_weibull_to_monthly_wind_data(monthly_wind_speeds, input_file):
         ax.legend(fontsize="small")
 
     plt.tight_layout()
-    plt.savefig(f"./images/weibull_distributions/{input_file}.png", dpi=500)
+    plt.savefig(f"./images/weibull_distributions/{input_file}.png", dpi=400)
     plt.close()
 
     return params
@@ -419,7 +419,7 @@ def plot_avg_ks_per_method(averages_file_path, output_path="./images/model_compa
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     plt.tight_layout()
-    plt.savefig(output_path, dpi=500)
+    plt.savefig(output_path, dpi=400)
     plt.close()
 
 
@@ -448,7 +448,7 @@ def plot_avg_params_per_station(averages_file_path, output_path="./images/model_
     plt.grid(axis="y", alpha=0.3)
     plt.tight_layout()
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    plt.savefig(output_path, dpi=500)
+    plt.savefig(output_path, dpi=400)
     plt.close()
 
 
@@ -508,7 +508,7 @@ def plot_monthly_wind_stats(stats_file_path, output_dir="./images/model_comparis
         plt.tight_layout()
         os.makedirs(output_dir, exist_ok=True)
         output_file_path = os.path.join(output_dir, f"wind_stats_method_{method.lower()}.png")
-        plt.savefig(output_file_path, dpi=500, bbox_inches="tight")
+        plt.savefig(output_file_path, dpi=400, bbox_inches="tight")
         plt.close()
 
 
@@ -547,7 +547,7 @@ def plot_avg_wind_stats(stats_file_path, output_dir="./images/model_comparison")
 
         os.makedirs(output_dir, exist_ok=True)
         output_file_path = os.path.join(output_dir, f"avg_wind_stats_{method.lower()}.png")
-        plt.savefig(output_file_path, dpi=500, bbox_inches="tight")
+        plt.savefig(output_file_path, dpi=400, bbox_inches="tight")
         plt.close()
 
 
@@ -591,7 +591,7 @@ def plot_mean_with_ci_by_method(csv_path, output_dir="./images/model_comparison"
         plt.tight_layout()
 
         output_path = os.path.join(output_dir, f"mean_ci_{method.lower()}.png")
-        plt.savefig(output_path, dpi=500)
+        plt.savefig(output_path, dpi=400)
         plt.close()
 
 
